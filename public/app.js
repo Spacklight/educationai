@@ -83,12 +83,25 @@ function stripMarkdownForSpeech(md){
     .replace(/\s+/g, ' ').trim();
 }
 function pickVoice(){
-  if (!('speechSynthesis' in window)) return null;
-  const voices = window.speechSynthesis.getVoices();
-  if (!voices || !voices.length) return null;
-  const preferred = [/Google UK English Female/i, /Google US English/i, /Samantha/i, /Karen/i, /en[-_]GB/i, /en[-_]US/i];
-  for (const p of preferred) { const v = voices.find(v => p.test(v.name) || p.lang.match(p)); if (v) return v; }
-  return voices.find(v => v.lang && v.lang.startsWith('en')) || voices[0];
+  try {
+    if (!('speechSynthesis' in window)) return null;
+    const voices = window.speechSynthesis.getVoices();
+    if (!voices || !voices.length) return null;
+    
+    const preferred = [/Google UK English Female/i, /Google US English/i, /Samantha/i, /Karen/i, /en[-_]GB/i, /en[-_]US/i];
+    
+    for (const p of preferred) { 
+      const v = voices.find(v => {
+        if (v.name && p.test(v.name)) return true;
+        if (v.lang && typeof v.lang === 'string' && v.lang.match(p)) return true;
+        return false;
+      }); 
+      if (v) return v; 
+    }
+    return voices.find(v => v.lang && v.lang.startsWith('en')) || voices[0];
+  } catch (e) {
+    return null;
+  }
 }
 function cancelSpeech(){
   if (!('speechSynthesis' in window)) return;
