@@ -230,6 +230,36 @@ export default {
           return json({ ok: true });
         }
 
+        // --- TEACHER STATE & AUTO-SCHEDULE ---
+        if (path.match(/^\/api\/teacher-state\/[^\/]+$/) && method === 'GET') {
+          const profileId = path.split('/')[3];
+          const ts = await readGitHub(env, 'data/teacher-states.json', []);
+          const state = ts.find(t => t.profileId === profileId) || { profileId, announcements: [] };
+          return json(state);
+        }
+
+        if (path === '/api/classroom/auto-schedule' && method === 'POST') {
+          const body = await request.json();
+          const { profileId } = body;
+          
+          const ts = await readGitHub(env, 'data/teacher-states.json', []);
+          let state = ts.find(t => t.profileId === profileId);
+          if (!state) { state = { profileId, announcements: [] }; ts.push(state); }
+
+          // If no class is pending, schedule one for 5 minutes from now
+          if (!state.pendingClassSuggestion) {
+            state.pendingClassSuggestion = {
+              topic: "Next Lesson",
+              message: "I've prepared a new lesson for you. Let's dive in!",
+              at: new Date().toISOString(),
+              scheduledAt: Date.now() + 5 * 60 * 1000
+            };
+            await writeGitHub(env, 'data/teacher-states.json', ts);
+          }
+          
+          return json({ suggestion: state.pendingClassSuggestion });
+        }
+
         // --- USAGE / MISC ---
         if (path === '/api/usage') return json({ used: 10, limit: 500 });
         
