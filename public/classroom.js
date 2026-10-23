@@ -684,10 +684,8 @@
       });
     } catch (e) {
       $('classroomLoading').style.display = 'none';
-      const msg = e.name === 'AbortError' 
-        ? 'Network timeout. Please check your internet connection.' 
-        : e.message;
-      if (hooks().showToast) hooks().showToast('Could not start class: ' + msg);
+      alert('START CLASS ERROR: ' + e.message); // This will pop up
+      if (hooks().showToast) hooks().showToast('Could not start class: ' + e.message);
     }
   }
 
