@@ -30,6 +30,7 @@
     <button class="nav-btn" id="timetableBtn" style="display:none;">📅 Timetable</button>
     <button class="nav-btn" id="visionBtn" style="display:none;">🎯 Vision</button>
     <button class="nav-btn" id="exercisesBtn" style="display:none;">📝 Exercises <span id="exBadge" class="nav-badge" style="display:none;"></span></button>
+    <button class="nav-btn" id="liveClassBtn" style="display:none;">🎓 Live Class</button>
     
     <button class="nav-btn" id="infoBtn" title="Information" style="padding:0.4rem 0.6rem;">ℹ️</button>
     <button class="tts-toggle" id="ttsToggle" title="Read responses aloud" aria-label="Toggle text to speech">🔊</button>
@@ -185,7 +186,7 @@
         <button class="btn-primary-inline" onclick="document.getElementById('profileBtn').click()">Add Picture</button>
       </div>
       
-      <div id="liveClassBanner" class="live-class-card" style="display:none;">
+      <div id="liveClassBanner" class="live-class-card" style="display:none !important;">
         <div class="live-class-icon">🎓</div>
         <div class="live-class-content">
           <h3>Live Class Ready! <span id="liveClassCount" class="live-class-count">1 Class</span></h3>

@@ -186,6 +186,8 @@ function updateProfileButton(){
   profileBtn.textContent = (state.profile.name || '?').charAt(0).toUpperCase();
   profileBtn.classList.add('visible');
   [timetableBtn, visionBtn, exercisesBtn].forEach(b => b.style.display = 'flex');
+  const lcBtn = document.getElementById('liveClassBtn');
+  if (lcBtn) lcBtn.style.display = 'flex';
 }
 function fillProfileForm(p){
   if (!p) return;
@@ -324,7 +326,8 @@ async function pollAnnouncements(){
     state.announcements = d.announcements || []; state.unreadAnnouncements = state.announcements.filter(a => !a.seen).length; renderAnnouncementsBanner();
     const banner = $('liveClassBanner');
     if (banner) {
-      if (d.pendingClassSuggestion) {
+      banner.style.display = 'none'; // Disable countdown banner
+      if (false) { // Never auto-show
         $('liveClassMessage').textContent = '"' + d.pendingClassSuggestion.message + '"';
         $('liveClassTopic').textContent = d.pendingClassSuggestion.topic;
         $('liveClassCount').textContent = '1 Class Ready';
@@ -393,13 +396,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     $('heroName').innerHTML = getGreeting() + ', <span class="accent">' + state.profile.name + '</span>';
     await loadMaterials(); 
     
-    // Trigger AI auto-schedule for live class
-    try {
-      await fetch('/api/classroom/auto-schedule', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ profileId: state.profileId })
-      });
-    } catch (e) { console.error('Auto schedule failed', e); }
 
     await pollAnnouncements(); await refreshExBadge();
     showView('upload');
@@ -534,6 +530,15 @@ function checkForceAvatarBanner() {
 
 // Attach Avatar Listeners
 document.addEventListener('DOMContentLoaded', () => {
+  // Header Live Class button triggers the Language Modal
+  const liveClassBtn = document.getElementById('liveClassBtn');
+  if (liveClassBtn) {
+    liveClassBtn.addEventListener('click', () => {
+      const modal = document.getElementById('langModal');
+      if (modal) modal.style.display = 'flex';
+    });
+  }
+
   document.getElementById('avatarPickBtn')?.addEventListener('click', () => document.getElementById('avatarInput').click());
   document.getElementById('avatarInput')?.addEventListener('change', (e) => {
     const f = e.target.files && e.target.files[0];
