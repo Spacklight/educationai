@@ -173,11 +173,32 @@ export default {
           const { profileId, language } = body;
           const profiles = await readGitHub(env, 'data/profiles.json', []);
           const profile = profiles.find(p => p.id === profileId);
+          if (!profile) return err('Profile not found.', 404);
           
-          let prompt = `Start a live class for ${profile.name}. Return JSON: {"subject":"...","topic":"...","layout":"single","segments":[{"kind":"title","section":1,"elements":[{"type":"text","text":"..."}],"speech":"..."}]}`;
+          let prompt = `Start a live class for ${profile.name}. Return ONLY valid JSON: {"subject":"Science","topic":"Introduction","layout":"single","segments":[{"kind":"title","section":1,"elements":[{"type":"title","text":"Welcome"},{"type":"text","text":"Let's begin."}],"speech":"Welcome to class."}]}`;
           if (language === 'ny') prompt += `\nCRITICAL: Teach entirely in Chichewa.`;
 
-          const parsed = await callGemini(env, prompt, null, true);
+          let parsed = {};
+          try {
+            parsed = await callGemini(env, prompt, null, true);
+          } catch (e) {
+            console.error('Gemini failed', e);
+          }
+
+          // Fallback if AI fails or returns bad format
+          if (!parsed.segments || !parsed.segments.length) {
+            parsed = {
+              subject: "General",
+              topic: "Introduction",
+              layout: "single",
+              segments: [{
+                kind: "title",
+                section: 1,
+                elements: [{ type: "title", text: "Welcome to Class" }, { type: "text", text: "Let's start learning." }],
+                speech: "Welcome to today's class. Let's begin."
+              }]
+            };
+          }
           
           const session = {
             id: Math.random().toString(36).slice(2, 10),
@@ -203,10 +224,28 @@ export default {
           const session = rooms.find(r => r.profileId === profileId);
           if (!session || session.isComplete) return json({ segment: null, isFinal: true });
 
-          let prompt = `Continue live class on ${session.topic}. Return JSON: {"segment":{"kind":"point","section":1,"elements":[{"type":"text","text":"..."}],"speech":"..."},"isFinal":false}`;
+          let prompt = `Continue live class on "${session.topic}". Return ONLY valid JSON: {"segment":{"kind":"point","section":1,"elements":[{"type":"text","text":"Here is more info."}],"speech":"Let's look at this."},"isFinal":false}`;
           if (language === 'ny') prompt += `\nCRITICAL: Teach entirely in Chichewa.`;
 
-          const parsed = await callGemini(env, prompt, null, true);
+          let parsed = {};
+          try {
+            parsed = await callGemini(env, prompt, null, true);
+          } catch (e) {
+            console.error('Gemini failed', e);
+          }
+
+          if (!parsed.segment) {
+            parsed = {
+              segment: {
+                kind: "point",
+                section: 1,
+                elements: [{ type: "text", text: "End of lesson." }],
+                speech: "That brings us to the end of today's topic."
+              },
+              isFinal: true
+            };
+          }
+
           if (parsed.segment) {
             session.segments.push(parsed.segment);
             if (parsed.isFinal) session.isComplete = true;
