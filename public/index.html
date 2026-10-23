@@ -1,6 +1,18 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+
+<script>
+  window.addEventListener('error', function(e) {
+    const errBox = document.getElementById('loginError') || document.getElementById('regError');
+    if (errBox) {
+      errBox.textContent = "JS Error: " + e.message;
+      errBox.style.display = 'block';
+    }
+    console.error(e);
+  });
+</script>
+
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Study Helper — Your Personal Tutor</title>
@@ -469,6 +481,7 @@
   </div>
   <div class="toast" id="toast"></div>
 <div class="toast-announcement" id="toastAnnouncement"></div>
+<script src="/auth.js"></script>
 <script src="/app.js"></script>
 <script src="/classroom.js"></script>
 </body>
