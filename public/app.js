@@ -391,7 +391,17 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (state.profile) {
     state.profileId = state.profile.id; fillProfileForm(state.profile); updateProfileButton();
     $('heroName').innerHTML = getGreeting() + ', <span class="accent">' + state.profile.name + '</span>';
-    await loadMaterials(); await pollAnnouncements(); await refreshExBadge();
+    await loadMaterials(); 
+    
+    // Trigger AI auto-schedule for live class
+    try {
+      await fetch('/api/classroom/auto-schedule', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ profileId: state.profileId })
+      });
+    } catch (e) { console.error('Auto schedule failed', e); }
+
+    await pollAnnouncements(); await refreshExBadge();
     showView('upload');
     setInterval(async () => { await pollAnnouncements(); await refreshExBadge(); }, 45000);
   } else {
@@ -407,3 +417,161 @@ function loadExerciseList(){ console.log('Exercises triggered'); }
 window.__appState = state;
 window.showView = showView;
 window.showToast = showToast;
+
+
+// ============================================================
+// AVATAR UPLOAD & LIVE CLASS MODAL (Appended)
+// ============================================================
+
+async function resizeImageToSquare(file, size = 256) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(size / img.width, size / img.height, 1);
+      const w = Math.round(img.width * scale);
+      const h = Math.round(img.height * scale);
+      const canvas = document.createElement('canvas');
+      canvas.width = size; canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, Math.round((size - w) / 2), Math.round((size - h) / 2), w, h);
+      canvas.toBlob(blob => resolve(blob), 'image/png', 0.9);
+    };
+    img.onerror = reject;
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+async function uploadAvatar(file) {
+  if (!state.profileId) { showToast('Save your profile first.'); return; }
+  const wrap = document.getElementById('avatarProgressWrap');
+  const fill = document.getElementById('avatarProgressFill');
+  const txt = document.getElementById('avatarProgressText');
+  const pickBtn = document.getElementById('avatarPickBtn');
+
+  try {
+    const blob = await resizeImageToSquare(file, 256);
+    const form = new FormData();
+    form.append('file', new File([blob], 'avatar.png', { type: 'image/png' }));
+
+    if (wrap) {
+      wrap.style.display = 'block';
+      if(pickBtn) { pickBtn.disabled = true; pickBtn.textContent = 'Uploading...'; }
+      fill.style.width = '0%'; txt.textContent = 'Uploading... 0%';
+    }
+
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `/api/profile/${state.profileId}/avatar`);
+
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable && wrap) {
+        const pct = Math.round((e.loaded / e.total) * 100);
+        fill.style.width = pct + '%'; txt.textContent = `Uploading... ${pct}%`;
+      }
+    };
+
+    xhr.onload = async () => {
+      if(pickBtn) { pickBtn.disabled = false; pickBtn.textContent = '📷 Upload picture'; }
+      if (xhr.status === 200) {
+        if (wrap) { fill.style.width = '100%'; txt.textContent = '✅ Complete!'; setTimeout(() => wrap.style.display = 'none', 2000); }
+        showToast('Profile picture updated!');
+        if (state.profile) state.profile.avatarUpdatedAt = new Date().toISOString();
+        await refreshAvatarDisplay(true);
+      } else {
+        if (wrap) wrap.style.display = 'none';
+        let errMsg = 'Upload failed'; try { errMsg = JSON.parse(xhr.responseText).error || errMsg; } catch {}
+        showToast(errMsg);
+      }
+    };
+
+    xhr.onerror = () => {
+      if(pickBtn) { pickBtn.disabled = false; pickBtn.textContent = '📷 Upload picture'; }
+      if (wrap) wrap.style.display = 'none';
+      showToast('Network error during upload.');
+    };
+    xhr.send(form);
+  } catch (e) {
+    if (wrap) wrap.style.display = 'none';
+    if(pickBtn) { pickBtn.disabled = false; pickBtn.textContent = '📷 Upload picture'; }
+    showToast(e.message);
+  }
+}
+
+async function refreshAvatarDisplay(force = false) {
+  if (!state.profileId) return;
+  const version = (state.profile?.avatarUpdatedAt || 'none') + (force ? '&t=' + Date.now() : '');
+  const url = `/api/profile/${state.profileId}/avatar?v=${version}`;
+  const preview = document.getElementById('avatarPreview');
+  const removeBtn = document.getElementById('avatarRemoveBtn');
+
+  const img = new Image();
+  img.onload = () => {
+    if (profileBtn) {
+      profileBtn.innerHTML = ''; profileBtn.style.backgroundImage = `url(${url})`;
+      profileBtn.style.backgroundSize = 'cover'; profileBtn.style.backgroundPosition = 'center'; profileBtn.textContent = '';
+    }
+    if (preview) { preview.style.backgroundImage = `url(${url})`; preview.style.backgroundSize = 'cover'; preview.textContent = ''; }
+    if (removeBtn) removeBtn.style.display = 'inline-flex';
+    checkForceAvatarBanner();
+  };
+  img.onerror = () => {
+    if (profileBtn) { profileBtn.style.backgroundImage = ''; profileBtn.textContent = (state.profile?.name || '?').charAt(0).toUpperCase(); }
+    if (preview) { preview.style.backgroundImage = ''; preview.textContent = '👤'; }
+    if (removeBtn) removeBtn.style.display = 'none';
+    checkForceAvatarBanner();
+  };
+  img.src = url;
+}
+
+function checkForceAvatarBanner() {
+  const banner = document.getElementById('forceAvatarBanner');
+  if (!banner) return;
+  if (state.profile && !state.profile.avatarUpdatedAt) {
+    banner.style.display = 'flex';
+  } else {
+    banner.style.display = 'none';
+  }
+}
+
+// Attach Avatar Listeners
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('avatarPickBtn')?.addEventListener('click', () => document.getElementById('avatarInput').click());
+  document.getElementById('avatarInput')?.addEventListener('change', (e) => {
+    const f = e.target.files && e.target.files[0];
+    if (f) uploadAvatar(f);
+    e.target.value = '';
+  });
+  setInterval(checkForceAvatarBanner, 3000); // Poll banner occasionally
+
+  // LIVE CLASS MODAL LOGIC
+  const oldBtn = document.getElementById('joinLiveClassBtn');
+  if (oldBtn) {
+    const newBtn = oldBtn.cloneNode(true);
+    oldBtn.parentNode.replaceChild(newBtn, oldBtn);
+    
+    newBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      const modal = document.getElementById('langModal');
+      if (modal) modal.style.display = 'flex';
+    });
+  }
+
+  document.querySelectorAll('.lang-btn').forEach(btn => {
+    const newLangBtn = btn.cloneNode(true);
+    btn.parentNode.replaceChild(newLangBtn, btn);
+    newLangBtn.addEventListener('click', async (e) => {
+      const lang = e.currentTarget.dataset.lang;
+      window.classLang = lang;
+      
+      document.getElementById('langModal').style.display = 'none';
+      document.getElementById('liveClassBanner').style.display = 'none';
+      
+      const profileId = localStorage.getItem('studyHelper.profileId');
+      if (profileId) {
+        try { await fetch('/api/classroom/dismiss-suggestion', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ profileId }) }); } catch {}
+      }
+      
+      if (typeof window.__classroomStart === 'function') window.__classroomStart();
+      else { showToast('Error loading classroom. Refreshing...'); setTimeout(() => location.reload(), 1000); }
+    });
+  });
+});
