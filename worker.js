@@ -312,7 +312,10 @@ async function writeGitHub(env, path, data) {
     headers: { 'Authorization': `Bearer ${env.GITHUB_TOKEN}`, 'User-Agent': 'CF-Worker', 'Content-Type': 'application/json' },
     body: JSON.stringify(body)
   });
-  if (!res.ok) console.error('GitHub Write Failed:', await res.text());
+  if (!res.ok) {
+    const errorText = await res.text();
+    throw new Error('GitHub Write Failed: ' + errorText);
+  }
 }
 
 async function writeGitHubBinary(env, path, arrayBuffer) {

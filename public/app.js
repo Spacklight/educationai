@@ -319,62 +319,7 @@ function fillProfileForm(p){
   $('pNotes').value = p.notes || '';
   state.selectedSubjects = new Set(p.subjects || []);
 
-  // --- Auth Logic ---
-  $('tabLogin')?.addEventListener('click', () => {
-    $('tabLogin').classList.add('active'); $('tabRegister').classList.remove('active');
-    $('loginForm').style.display = 'block'; $('registerForm').style.display = 'none';
-  });
-  $('tabRegister')?.addEventListener('click', () => {
-    $('tabRegister').classList.add('active'); $('tabLogin').classList.remove('active');
-    $('registerForm').style.display = 'block'; $('loginForm').style.display = 'none';
-  });
-
-  $('loginForm')?.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const user = $('loginUser').value.trim();
-    const pass = $('loginPass').value;
-    const err = $('loginError');
-    err.style.display = 'none';
-    try {
-      const r = await fetch('/api/auth/login', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: user, password: pass })
-      });
-      const text = await r.text();
-      let d = {};
-      try { d = JSON.parse(text); } catch { throw new Error('Server returned invalid response.'); }
-      if (!r.ok) throw new Error(d.error || 'Login failed');
-      
-      localStorage.setItem('studyHelper.profileId', d.id);
-      state.profile = d.profile;
-      state.profileId = d.id;
-      
-      fillProfileForm(state.profile);
-      updateProfileButton();
-      $('heroName').innerHTML = getGreeting() + ', <span class="accent">' + state.profile.name + '</span>';
-      
-      showView('upload');
-      await pollAnnouncements();
-      await refreshExBadge();
-      await refreshAvatarDisplay();
-    } catch (e) {
-      err.textContent = e.message; err.style.display = 'block';
-    }
-  });
-
-  $('registerForm')?.addEventListener('submit', (e) => {
-    e.preventDefault();
-    const user = $('regUser').value.trim();
-    const pass = $('regPass').value;
-    if (pass.length < 4) { $('regError').textContent = 'Password must be at least 4 chars'; $('regError').style.display='block'; return; }
-    
-    $('regUserHidden').value = user;
-    $('regPassHidden').value = pass;
-    
-    // Clear any old data in the profile form
-    $('profileForm').reset();
-    state.selectedSubjects.clear();
-    renderSubjectChips();
+  renderSubjectChips();
     
     showView('profile');
   });
@@ -1461,4 +1406,106 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     });
   }, 1500); // 1.5s delay ensures the page and buttons are fully loaded
+});
+
+
+// ============================================================
+// BULLETPROOF AUTHENTICATION (Event Delegation)
+// ============================================================
+document.addEventListener('click', (e) => {
+  // Handle Tabs
+  if (e.target.id === 'tabLogin') {
+    e.target.classList.add('active');
+    document.getElementById('tabRegister').classList.remove('active');
+    document.getElementById('loginForm').style.display = 'block';
+    document.getElementById('registerForm').style.display = 'none';
+  }
+  if (e.target.id === 'tabRegister') {
+    e.target.classList.add('active');
+    document.getElementById('tabLogin').classList.remove('active');
+    document.getElementById('registerForm').style.display = 'block';
+    document.getElementById('loginForm').style.display = 'none';
+  }
+});
+
+document.addEventListener('submit', async (e) => {
+  // --- 1. LOGIN FORM ---
+  if (e.target.id === 'loginForm') {
+    e.preventDefault(); // Stops the page from reloading
+    const user = document.getElementById('loginUser').value.trim();
+    const pass = document.getElementById('loginPass').value;
+    const errBox = document.getElementById('loginError');
+    errBox.style.display = 'none';
+    
+    const btn = e.target.querySelector('button');
+    const origText = btn.textContent;
+    btn.textContent = 'Loading...';
+    btn.disabled = true;
+
+    try {
+      const r = await fetch('/api/auth/login', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: user, password: pass })
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'Login failed');
+      
+      localStorage.setItem('studyHelper.profileId', d.id);
+      state.profile = d.profile;
+      state.profileId = d.id;
+      
+      fillProfileForm(state.profile);
+      updateProfileButton();
+      document.getElementById('heroName').innerHTML = getGreeting() + ', <span class="accent">' + state.profile.name + '</span>';
+      
+      showView('upload');
+      await pollAnnouncements();
+      await refreshExBadge();
+    } catch (err) {
+      errBox.textContent = err.message;
+      errBox.style.display = 'block';
+    } finally {
+      btn.textContent = origText;
+      btn.disabled = false;
+    }
+  }
+
+  // --- 2. REGISTER FORM (Username & Password) ---
+  if (e.target.id === 'registerForm') {
+    e.preventDefault(); // Stops the page from reloading
+    const user = document.getElementById('regUser').value.trim();
+    const pass = document.getElementById('regPass').value;
+    const errBox = document.getElementById('regError');
+    errBox.style.display = 'none';
+
+    if (pass.length < 4) {
+      errBox.textContent = 'Password must be at least 4 characters.';
+      errBox.style.display = 'block';
+      return;
+    }
+    
+    // Store temporarily and move to profile form
+    document.getElementById('regUserHidden').value = user;
+    document.getElementById('regPassHidden').value = pass;
+    
+    document.getElementById('profileForm').reset();
+    state.selectedSubjects.clear();
+    renderSubjectChips();
+    
+    showView('profile');
+  }
+
+  // --- 3. PROFILE FORM (Save Registration) ---
+  if (e.target.id === 'profileForm') {
+    // This is handled by the existing handleProfileSubmit function, but we ensure preventDefault is called
+    // If it's not already handled, we let the original function do it.
+    // However, if the user clicks the back button, we shouldn't submit.
+  }
+});
+
+// Also ensure the Back to Login button works
+document.addEventListener('click', (e) => {
+  if (e.target.id === 'backToAuthBtn') {
+    showView('auth');
+  }
 });
