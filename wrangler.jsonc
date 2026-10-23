@@ -1,0 +1,16 @@
+{
+  "name": "educationai",
+  "main": "worker.js",
+  "compatibility_date": "2026-10-23",
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS"
+  },
+  "vars": {
+    "GITHUB_OWNER": "Spacklight",
+    "GITHUB_REPO": "aidata"
+  },
+  "observability": {
+    "enabled": true
+  }
+}
