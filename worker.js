@@ -171,25 +171,28 @@ export default {
         if (path === '/api/classroom/start' && method === 'POST') {
           const body = await request.json();
           const { profileId, language } = body;
+          
           const profiles = await readGitHub(env, 'data/profiles.json', []);
-          const profile = profiles.find(p => p.id === profileId);
-          if (!profile) return err('Profile not found.', 404);
+          const profile = profiles.find(p => p.id === profileId) || { name: 'Student' };
           
           let prompt = `Start a live class for ${profile.name}. Return ONLY valid JSON: {"subject":"Science","topic":"Introduction","layout":"single","segments":[{"kind":"title","section":1,"elements":[{"type":"title","text":"Welcome"},{"type":"text","text":"Let's begin."}],"speech":"Welcome to class."}]}`;
           if (language === 'ny') prompt += `\nCRITICAL: Teach entirely in Chichewa.`;
 
           let parsed = {};
           try {
-            parsed = await callGemini(env, prompt, null, true);
+            // Wrap Gemini call in a timeout to prevent Cloudflare from hanging
+            const aiPromise = callGemini(env, prompt, null, true);
+            const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('AI Timeout')), 8000));
+            parsed = await Promise.race([aiPromise, timeoutPromise]);
           } catch (e) {
-            console.error('Gemini failed', e);
+            console.error('Gemini failed or timed out', e);
           }
 
           // Fallback if AI fails or returns bad format
-          if (!parsed.segments || !parsed.segments.length) {
+          if (!parsed || !parsed.segments || !parsed.segments.length) {
             parsed = {
               subject: "General",
-              topic: "Introduction",
+              topic: "Welcome to Class",
               layout: "single",
               segments: [{
                 kind: "title",
@@ -210,18 +213,25 @@ export default {
             isComplete: false
           };
           
-          const rooms = await readGitHub(env, 'data/classrooms.json', []);
-          const updated = rooms.filter(r => r.profileId !== profileId);
-          updated.push(session);
-          await writeGitHub(env, 'data/classrooms.json', updated);
-          return json({ session });
-        }
+          // Try to save, but don't block the response if it fails
+          try {
+            const rooms = await readGitHub(env, 'data/classrooms.json', []);
+            const updated = rooms.filter(r => r.profileId !== profileId);
+            updated.push(session);
+            await writeGitHub(env, 'data/classrooms.json', updated);
+          } catch (e) { console.error('Save failed', e); }
 
-        if (path === '/api/classroom/next' && method === 'POST') {
+          return json({ session });
+        } else if (path === '/api/classroom/next' && method === 'POST') {
           const body = await request.json();
           const { profileId, language } = body;
-          const rooms = await readGitHub(env, 'data/classrooms.json', []);
-          const session = rooms.find(r => r.profileId === profileId);
+          
+          let session = null;
+          try {
+            const rooms = await readGitHub(env, 'data/classrooms.json', []);
+            session = rooms.find(r => r.profileId === profileId);
+          } catch (e) {}
+
           if (!session || session.isComplete) return json({ segment: null, isFinal: true });
 
           let prompt = `Continue live class on "${session.topic}". Return ONLY valid JSON: {"segment":{"kind":"point","section":1,"elements":[{"type":"text","text":"Here is more info."}],"speech":"Let's look at this."},"isFinal":false}`;
@@ -229,12 +239,12 @@ export default {
 
           let parsed = {};
           try {
-            parsed = await callGemini(env, prompt, null, true);
-          } catch (e) {
-            console.error('Gemini failed', e);
-          }
+            const aiPromise = callGemini(env, prompt, null, true);
+            const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('AI Timeout')), 8000));
+            parsed = await Promise.race([aiPromise, timeoutPromise]);
+          } catch (e) { console.error('Gemini timeout', e); }
 
-          if (!parsed.segment) {
+          if (!parsed || !parsed.segment) {
             parsed = {
               segment: {
                 kind: "point",
@@ -251,13 +261,15 @@ export default {
             if (parsed.isFinal) session.isComplete = true;
           }
 
-          const updated = rooms.filter(r => r.profileId !== profileId);
-          updated.push(session);
-          await writeGitHub(env, 'data/classrooms.json', updated);
-          return json({ segment: parsed.segment, isFinal: parsed.isFinal, session });
-        }
+          try {
+            const rooms = await readGitHub(env, 'data/classrooms.json', []);
+            const updated = rooms.filter(r => r.profileId !== profileId);
+            updated.push(session);
+            await writeGitHub(env, 'data/classrooms.json', updated);
+          } catch (e) {}
 
-        if (path === '/api/classroom/dismiss-suggestion' && method === 'POST') {
+          return json({ segment: parsed.segment, isFinal: parsed.isFinal, session });
+        } else if (path === '/api/classroom/dismiss-suggestion' && method === 'POST') {
           const body = await request.json();
           const { profileId } = body;
           const ts = await readGitHub(env, 'data/teacher-states.json', []);
