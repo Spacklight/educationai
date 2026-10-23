@@ -4,7 +4,6 @@ export default {
     const path = url.pathname;
     const method = request.method;
 
-    // CORS Headers for local testing
     const corsHeaders = {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
@@ -13,22 +12,27 @@ export default {
 
     if (method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
-    // Helper functions for API responses
     const json = (data, status = 200) => new Response(JSON.stringify(data), {
       status, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
     const err = (msg, status = 400) => json({ error: msg }, status);
 
     try {
-      // ============================================================
-      // ROUTING
-      // ============================================================
       if (path.startsWith('/api/')) {
-        const body = (method === 'POST' || method === 'PUT') && request.headers.get('content-type')?.includes('application/json')
-          ? await request.json() : {};
+        
+        // --- TEST ENV VARIABLES ---
+        if (path === '/api/test-env') {
+          return json({ 
+            hasGemini: !!env.GEMINI_API_KEY, 
+            hasGithub: !!env.GITHUB_TOKEN,
+            owner: env.GITHUB_OWNER,
+            repo: env.GITHUB_REPO
+          });
+        }
 
         // --- AUTH ---
         if (path === '/api/auth/register' && method === 'POST') {
+          const body = await request.json();
           const profiles = await readGitHub(env, 'data/profiles.json', []);
           if (profiles.find(p => p.username && p.username.toLowerCase() === body.username.toLowerCase())) {
             return err('Username already exists.');
@@ -42,6 +46,7 @@ export default {
         }
 
         if (path === '/api/auth/login' && method === 'POST') {
+          const body = await request.json();
           const profiles = await readGitHub(env, 'data/profiles.json', []);
           const profile = profiles.find(p => p.username && p.username.toLowerCase() === body.username.toLowerCase());
           if (!profile || profile.passwordHash !== await hashPassword(body.password)) {
@@ -52,6 +57,7 @@ export default {
 
         // --- PROFILE ---
         if (path === '/api/profile' && method === 'POST') {
+          const body = await request.json();
           const profiles = await readGitHub(env, 'data/profiles.json', []);
           const id = body.id || Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
           const record = { ...body, id, updatedAt: new Date().toISOString() };
@@ -88,7 +94,7 @@ export default {
           return json(p);
         }
 
-        // --- MATERIALS (Upload & Topics) ---
+        // --- MATERIALS ---
         if (path === '/api/materials/upload' && method === 'POST') {
           const formData = await request.formData();
           const profileId = formData.get('profileId');
@@ -98,8 +104,8 @@ export default {
           const parsedDocs = [];
           for (const file of files) {
             const buffer = await file.arrayBuffer();
-            const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
-            // Send to Gemini to extract topics
+            const base64 = b64EncodeUnicode(new TextDecoder().decode(buffer));
+            
             const prompt = `Extract the main topics and subtopics from this document. Return ONLY JSON: {"subject":"...","title":"${file.name}","topics":[{"name":"...","subtopics":["..."]}]}`;
             const aiResp = await callGemini(env, prompt, { mimeType: file.type, data: base64 }, true);
             parsedDocs.push(aiResp);
@@ -115,7 +121,7 @@ export default {
             subject: d.subject || 'General',
             title: d.title || 'Document',
             topics: d.topics || [],
-            textLength: 0, // Don't store raw text in CF to save space
+            textLength: 0,
             uploadedAt: new Date().toISOString()
           }));
 
@@ -133,6 +139,7 @@ export default {
 
         // --- CHAT ---
         if (path === '/api/chat' && method === 'POST') {
+          const body = await request.json();
           const { profileId, message, history } = body;
           const profiles = await readGitHub(env, 'data/profiles.json', []);
           const profile = profiles.find(p => p.id === profileId);
@@ -143,7 +150,6 @@ export default {
 
           const aiResp = await callGemini(env, null, null, false, contents, teacherPrompt);
           
-          // Check if AI wants to suggest a live class (simplified for CF)
           const suggestClass = message.toLowerCase().includes('live class') || message.toLowerCase().includes('deep dive');
           if (suggestClass) {
             const ts = await readGitHub(env, 'data/teacher-states.json', []);
@@ -163,6 +169,7 @@ export default {
 
         // --- CLASSROOM ---
         if (path === '/api/classroom/start' && method === 'POST') {
+          const body = await request.json();
           const { profileId, language } = body;
           const profiles = await readGitHub(env, 'data/profiles.json', []);
           const profile = profiles.find(p => p.id === profileId);
@@ -190,6 +197,7 @@ export default {
         }
 
         if (path === '/api/classroom/next' && method === 'POST') {
+          const body = await request.json();
           const { profileId, language } = body;
           const rooms = await readGitHub(env, 'data/classrooms.json', []);
           const session = rooms.find(r => r.profileId === profileId);
@@ -211,6 +219,7 @@ export default {
         }
 
         if (path === '/api/classroom/dismiss-suggestion' && method === 'POST') {
+          const body = await request.json();
           const { profileId } = body;
           const ts = await readGitHub(env, 'data/teacher-states.json', []);
           const state = ts.find(t => t.profileId === profileId);
@@ -223,12 +232,10 @@ export default {
 
         // --- USAGE / MISC ---
         if (path === '/api/usage') return json({ used: 10, limit: 500 });
-        if (path === '/api/teacher-state/:id') return json({});
         
         return err('API Route Not Found', 404);
       }
 
-      // Serve static files (Frontend)
       return env.ASSETS.fetch(request);
 
     } catch (e) {
@@ -239,8 +246,14 @@ export default {
 };
 
 // ============================================================
-// HELPERS (GitHub & Gemini)
+// HELPERS
 // ============================================================
+function b64EncodeUnicode(str) {
+  return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, (match, p1) => String.fromCharCode('0x' + p1)));
+}
+function b64DecodeUnicode(str) {
+  return decodeURIComponent(Array.prototype.map.call(atob(str), (c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join(''));
+}
 
 async function hashPassword(pass) {
   const msgBuffer = new TextEncoder().encode(pass);
@@ -250,7 +263,6 @@ async function hashPassword(pass) {
 
 async function callGemini(env, prompt, fileData = null, jsonMode = false, contents = null, systemPrompt = null) {
   const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${env.GEMINI_API_KEY}`;
-  
   let body;
   if (contents) {
     body = { contents };
@@ -260,13 +272,11 @@ async function callGemini(env, prompt, fileData = null, jsonMode = false, conten
     if (fileData) parts.push({ inlineData: fileData });
     body = { contents: [{ role: 'user', parts }] };
   }
-
   if (jsonMode) body.generationConfig = { responseMimeType: 'application/json', temperature: 0.7 };
 
   const r = await fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   const d = await r.json();
   const text = d.candidates?.[0]?.content?.parts?.[0]?.text || '';
-  
   if (jsonMode) {
     try { return JSON.parse(text.replace(/```json/g, '').replace(/```/g, '').trim()); } 
     catch { return {}; }
@@ -286,15 +296,14 @@ async function fetchGitHubFile(env, path) {
 async function readGitHub(env, path, fallback) {
   const file = await fetchGitHubFile(env, path);
   if (!file) return fallback;
-  const decoded = atob(file.content.replace(/\n/g, ''));
+  const decoded = b64DecodeUnicode(file.content.replace(/\n/g, ''));
   return JSON.parse(decoded);
 }
 
 async function writeGitHub(env, path, data) {
   const file = await fetchGitHubFile(env, path);
-  const content = btoa(JSON.stringify(data, null, 2));
+  const content = b64EncodeUnicode(JSON.stringify(data, null, 2));
   const url = `https://api.github.com/repos/${env.GITHUB_OWNER}/${env.GITHUB_REPO}/contents/${path}`;
-  
   const body = { message: `update ${path}`, content, branch: 'main' };
   if (file) body.sha = file.sha;
 
@@ -308,9 +317,8 @@ async function writeGitHub(env, path, data) {
 
 async function writeGitHubBinary(env, path, arrayBuffer) {
   const file = await fetchGitHubFile(env, path);
-  const b64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+  const b64 = b64EncodeUnicode(new TextDecoder().decode(arrayBuffer));
   const url = `https://api.github.com/repos/${env.GITHUB_OWNER}/${env.GITHUB_REPO}/contents/${path}`;
-  
   const body = { message: `update ${path}`, content: b64, branch: 'main' };
   if (file) body.sha = file.sha;
 

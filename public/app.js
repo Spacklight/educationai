@@ -340,8 +340,10 @@ function fillProfileForm(p){
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: user, password: pass })
       });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.error);
+      const text = await r.text();
+      let d = {};
+      try { d = JSON.parse(text); } catch { throw new Error('Server returned invalid response.'); }
+      if (!r.ok) throw new Error(d.error || 'Login failed');
       
       localStorage.setItem('studyHelper.profileId', d.id);
       state.profile = d.profile;
@@ -412,7 +414,9 @@ async function handleProfileSubmit(e){
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(p)
       });
-      const d = await r.json();
+      const text = await r.text();
+      let d = {};
+      try { d = JSON.parse(text); } catch { throw new Error('Server error during registration.'); }
       if (!r.ok) throw new Error(d.error || 'Registration failed');
       saved = d.profile;
       localStorage.setItem('studyHelper.profileId', d.id);
