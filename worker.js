@@ -172,26 +172,27 @@ export default {
           const body = await request.json();
           const { profileId, language } = body;
           
-          let parsed = {};
+          let parsed = {
+            subject: "General",
+            topic: "Welcome to Class",
+            layout: "single",
+            segments: [{ 
+              kind: "title", section: 1, 
+              elements: [{ type: "title", text: "Welcome to Class" }, { type: "text", text: "Let's start learning." }], 
+              speech: "Welcome to today's class. Let's begin." 
+            }]
+          };
+
+          // Try AI, but never wait more than 5 seconds
           try {
-            const profiles = await readGitHub(env, 'data/profiles.json', []);
-            const profile = profiles.find(p => p.id === profileId) || { name: 'Student' };
-            
-            let prompt = `Start a live class for ${profile.name}. Return ONLY valid JSON: {"subject":"Science","topic":"Introduction","layout":"single","segments":[{"kind":"title","section":1,"elements":[{"type":"title","text":"Welcome"},{"type":"text","text":"Let's begin."}],"speech":"Welcome to class."}]}`;
-            if (language === 'ny') prompt += `\nCRITICAL: Teach entirely in Chichewa.`;
-
+            const prompt = `Start a class. Return ONLY JSON: {"subject":"Science","topic":"Intro","layout":"single","segments":[{"kind":"title","section":1,"elements":[{"type":"title","text":"Hi"}],"speech":"Hello"}]}`;
             const aiPromise = callGemini(env, prompt, null, true);
-            const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('AI Timeout')), 8000));
-            parsed = await Promise.race([aiPromise, timeoutPromise]);
-          } catch (e) { console.error('AI failed', e); }
-
-          if (!parsed || !parsed.segments || !parsed.segments.length) {
-            parsed = {
-              subject: "General",
-              topic: "Welcome to Class",
-              layout: "single",
-              segments: [{ kind: "title", section: 1, elements: [{ type: "title", text: "Welcome to Class" }, { type: "text", text: "Let's start learning." }], speech: "Welcome to today's class. Let's begin." }]
-            };
+            const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 5000));
+            const aiResult = await Promise.race([aiPromise, timeoutPromise]);
+            
+            if (aiResult && aiResult.segments) parsed = aiResult;
+          } catch (e) { 
+            console.error('AI failed, using fallback', e); 
           }
 
           const session = {
@@ -204,14 +205,14 @@ export default {
             isComplete: false
           };
 
-          // Use ctx.waitUntil to save in the background so the response is instant
+          // Fire and forget the save (do not await it)
           ctx.waitUntil((async () => {
             try {
               const rooms = await readGitHub(env, 'data/classrooms.json', []);
               const updated = rooms.filter(r => r.profileId !== profileId);
               updated.push(session);
               await writeGitHub(env, 'data/classrooms.json', updated);
-            } catch (e) { console.error('Background save failed', e); }
+            } catch (e) {}
           })());
 
           return json({ session });
