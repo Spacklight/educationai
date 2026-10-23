@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Study Helper — Your Personal Tutor</title>
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Kalam:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+
+<header>
+  <div class="logo"><div class="icon">📚</div>Study Helper</div>
+  <div class="header-right">
+    <button class="nav-btn" id="timetableBtn" style="display:none;">📅 Timetable</button>
+    <button class="nav-btn" id="visionBtn" style="display:none;">🎯 Vision</button>
+    <button class="nav-btn" id="exercisesBtn" style="display:none;">📝 Exercises <span id="exBadge" class="nav-badge" style="display:none;"></span></button>
+    
+    <button class="nav-btn" id="infoBtn" title="Information" style="padding:0.4rem 0.6rem;">ℹ️</button>
+    <button class="tts-toggle" id="ttsToggle" title="Read responses aloud" aria-label="Toggle text to speech">🔊</button>
+    <div class="usage"><span class="dot" id="usageDot"></span><span id="usageText">Loading…</span></div>
+    <button class="profile-btn" id="profileBtn" title="Edit profile">?</button>
+  </div>
+</header>
+
+<main>
+
+  
+  <!-- AUTH VIEW -->
+  <div class="view auth-view active" id="authView">
+    <div class="auth-container">
+      <div class="auth-tabs">
+        <button class="auth-tab active" id="tabLogin">Login</button>
+        <button class="auth-tab" id="tabRegister">Register</button>
+      </div>
+
+      <!-- Login Form -->
+      <form id="loginForm" class="auth-form">
+        <h2>Welcome back!</h2>
+        <div class="field"><label>Username</label><input type="text" id="loginUser" required></div>
+        <div class="field"><label>Password</label><input type="password" id="loginPass" required></div>
+        <button type="submit" class="btn-primary-large" style="position:static; margin-top:1rem;">Login</button>
+        <div id="loginError" class="error-box" style="margin-top:1rem;"></div>
+      </form>
+
+      <!-- Register Form -->
+      <form id="registerForm" class="auth-form" style="display:none;">
+        <h2>Create an account</h2>
+        <div class="field"><label>Username</label><input type="text" id="regUser" required></div>
+        <div class="field"><label>Password</label><input type="password" id="regPass" required></div>
+        <button type="submit" class="btn-primary-large" style="position:static; margin-top:1rem;">Next: Your Details →</button>
+        <div id="regError" class="error-box" style="margin-top:1rem;"></div>
+      </form>
+    </div>
+  </div>
+
+  <!-- PROFILE VIEW -->
+  <div class="view profile-view" id="profileView">
+    <div class="profile-container">
+      <div class="profile-header">
+        <button type="button" id="backToAuthBtn" class="back-btn" style="margin-bottom:1rem;">← Back to Login</button><h1>Let's get to know you</h1>
+        <p>I'll use this to personalize every explanation, timetable, exercise, and live class.</p>
+      </div>
+      <form id="profileForm">
+        <input type="hidden" id="regUserHidden">
+        <input type="hidden" id="regPassHidden">
+        <section class="form-section">
+          <h2>Profile picture <span class="optional">(optional)</span></h2>
+          <div class="avatar-upload-row">
+            <div class="avatar-preview" id="avatarPreview">👤</div>
+            
+            <div class="avatar-actions">
+              <div id="avatarProgressWrap" style="display:none; width:100%; margin-bottom:0.5rem;">
+                <div class="upload-progress-bar"><div class="upload-progress-fill" id="avatarProgressFill"></div></div>
+                <div class="upload-progress-text" id="avatarProgressText">Uploading... 0%</div>
+              </div>
+
+              <input type="file" id="avatarInput" accept="image/*" hidden>
+              <button type="button" class="btn-outline" id="avatarPickBtn">📷 Upload picture</button>
+              <button type="button" class="btn-outline" id="avatarRemoveBtn" style="display:none;">🗑 Remove</button>
+              <p class="avatar-hint">Square images look best. Stored in your GitHub data repo.</p>
+            </div>
+          </div>
+        </section>
+        <section class="form-section">
+          <h2>About you</h2>
+          <div class="field-row">
+            <div class="field"><label for="pName">Your name *</label><input type="text" id="pName" maxlength="60" required></div>
+            <div class="field"><label for="pAge">Age *</label><input type="number" id="pAge" min="5" max="99" required></div>
+          </div>
+          <div class="field-row">
+            <div class="field"><label for="pLevel">Education level *</label>
+              <select id="pLevel" required>
+                <option value="">Select…</option>
+                <option value="primary">Primary</option>
+                <option value="secondary">Secondary / High school</option>
+                <option value="college">College / University</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+            <div class="field"><label for="pGrade">Grade / Year *</label><input type="text" id="pGrade" required></div>
+          </div>
+          <div class="field"><label for="pSchool">School / Institution</label><input type="text" id="pSchool" maxlength="100"></div>
+        </section>
+        <section class="form-section">
+          <h2>What you're studying</h2>
+          <div class="field">
+            <label>Subjects *</label>
+            <div class="chips" id="subjectChips"></div>
+            <div class="chip-add">
+              <input type="text" id="customSubject" placeholder="Add a custom subject…">
+              <button type="button" class="chip-add-btn" id="addSubjectBtn">Add</button>
+            </div>
+          </div>
+          <div class="field">
+            <label for="pGoal">Your main goal *</label>
+            <select id="pGoal" required>
+              <option value="">Select…</option>
+              <option value="exam">Pass an upcoming exam</option>
+              <option value="understand">Understand deeply</option>
+              <option value="homework">Homework help</option>
+              <option value="catchup">Catch up</option>
+              <option value="excel">Excel and get top grades</option>
+            </select>
+          </div>
+          <div class="field"><label for="pExamDate">Next exam <span class="optional">(optional)</span></label><input type="date" id="pExamDate"></div>
+        </section>
+        <section class="form-section">
+          <h2>How you like to study</h2>
+          <div class="field"><label for="pHours">Hours available per week *</label><input type="number" id="pHours" min="1" max="60" value="10" required></div>
+          <div class="field">
+            <label for="pStyle">Preferred learning style</label>
+            <select id="pStyle">
+              <option value="mixed">A mix of everything</option>
+              <option value="visual">Visual</option>
+              <option value="reading">Reading</option>
+              <option value="practice">Practice</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="pTime">Best time to study</label>
+            <select id="pTime">
+              <option value="morning">Morning</option>
+              <option value="afternoon">Afternoon</option>
+              <option value="evening">Evening</option>
+              <option value="night">Late night</option>
+            </select>
+          </div>
+          <div class="field"><label for="pNotes">Anything else <span class="optional">(optional)</span></label><textarea id="pNotes" rows="3"></textarea></div>
+        </section>
+        <button type="submit" class="btn-primary-large">Complete Registration →</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- MATERIALS -->
+  <div class="view materials-view" id="uploadView">
+    <div style="display:none;" id="dropZone"><input type="file" id="fileInput"></div>
+    <div style="display:none;" id="uploading"><div id="uploadingText"></div><div class="uploading-bar"><div class="fill"></div></div></div>
+    <div style="display:none;" id="errorBox"></div>
+
+    <div class="materials-container">
+      
+      <div id="forceAvatarBanner" class="force-avatar-card" style="display:none;">
+        <div class="force-avatar-icon">📸</div>
+        <div class="force-avatar-content">
+          <h3>Add a profile picture!</h3>
+          <p>Personalize your learning experience. Your AI teacher needs to know who you are.</p>
+        </div>
+        <button class="btn-primary-inline" onclick="document.getElementById('profileBtn').click()">Add Picture</button>
+      </div>
+      
+      <div id="liveClassBanner" class="live-class-card" style="display:none;">
+        <div class="live-class-icon">🎓</div>
+        <div class="live-class-content">
+          <h3>Live Class Ready! <span id="liveClassCount" class="live-class-count">1 Class</span></h3>
+          <p id="liveClassMessage">"I have prepared a lesson for you."</p>
+          <div style="display:flex; align-items:center; gap:1rem; margin-top:0.4rem; flex-wrap:wrap;">
+            <p class="live-class-topic" id="liveClassTopic" style="margin:0;">Topic</p>
+            <div class="live-class-timer" id="liveClassTimer">Starts in 05:00</div>
+          </div>
+        </div>
+        <button class="btn-primary-inline" id="joinLiveClassBtn">Join Class</button>
+      </div>
+      <div class="hero">
+        <h1 id="heroName">Welcome back</h1>
+        <p>Upload up to 6 documents. Each becomes a study module the tutor can teach you from.</p>
+      </div>
+
+      <div class="materials-toolbar">
+        <button class="btn-primary-inline" id="addMaterialsBtn">📎 Add materials (max 6)</button>
+        <input type="file" id="materialsInput" accept=".pdf,.docx,.txt,.md" multiple hidden>
+        <button class="btn-outline" id="freeChatBtn">💬 Free tutor chat</button>
+      </div>
+
+      <div class="materials-uploading" id="materialsUploading" style="display:none;">
+        <div class="materials-uploading-text" id="materialsUploadingText">Analyzing documents…</div>
+        <div class="uploading-bar"><div class="fill"></div></div>
+      </div>
+      <div class="materials-error" id="materialsError" style="display:none;"></div>
+
+      <div class="modules-grid" id="modulesGrid"></div>
+    </div>
+  </div>
+
+  <!-- CHAT -->
+  <div class="view chat-view" id="chatView">
+    <div class="doc-bar">
+      <div class="doc-info">
+        <div class="pdf-icon">📄</div>
+        <div class="doc-meta">
+          <div class="doc-name" id="docName">Module</div>
+          <div class="doc-chars" id="docChars">—</div>
+        </div>
+      </div>
+      <button class="btn-outline" id="newDocBtn">← Modules</button>
+    </div>
+    <div class="messages" id="messages"></div>
+    <div class="composer">
+      <textarea id="input" placeholder="Ask anything… (Enter to send)" rows="1"></textarea>
+      <button class="send-btn" id="sendBtn">➤</button>
+    </div>
+  </div>
+
+  <!-- TIMETABLE -->
+  <div class="view timetable-view" id="timetableView">
+    <div class="timetable-container">
+      <div class="timetable-header">
+        <div><h1>Your Study Timetable</h1><p class="timetable-sub" id="timetableSub">Loading…</p></div>
+        <button class="btn-outline" id="regenerateTimetableBtn">↻ Regenerate</button>
+      </div>
+      <div class="timetable-loading" id="timetableLoading"><div class="spinner"></div><p>Building your personalised plan…</p></div>
+      <div id="timetableContent"></div>
+    </div>
+  </div>
+
+  <!-- VISION -->
+  <div class="view vision-view" id="visionView">
+    <div class="vision-container">
+      <div class="vision-header">
+        <div><h1>Your Vision</h1><p class="vision-sub" id="visionSub">Loading…</p></div>
+        <button class="btn-outline" id="regenerateVisionBtn">↻ Regenerate</button>
+      </div>
+      <div class="vision-loading" id="visionLoading"><div class="spinner"></div><p>Projecting your future…</p></div>
+      <div id="visionContent"></div>
+    </div>
+  </div>
+
+  <!-- EXERCISES -->
+  <div class="view exercises-view" id="exercisesView">
+    <div class="exercises-container">
+      <div class="exercises-header">
+        <div>
+          <h1>Exercises</h1>
+          <p class="exercises-sub" id="exercisesSub">Your teacher assigns exercises as you learn.</p>
+        </div>
+      </div>
+      <div id="announcementsBanner"></div>
+      <div id="exercisesContent"></div>
+    </div>
+  </div>
+
+  <!-- TAKE EXERCISE -->
+  <div class="view take-exercise-view" id="takeExerciseView">
+    <div class="take-exercise-container">
+      <div class="exercise-head">
+        <button class="back-btn" id="takeBackBtn">← Back</button>
+        <div class="exercise-meta-line" id="takeExerciseMeta"></div>
+      </div>
+      <h1 id="takeExerciseTitle">Loading…</h1>
+      <p class="exercise-instructions" id="takeExerciseInstructions"></p>
+      <div id="exerciseDeadline" class="exercise-deadline" style="display:none;"></div>
+      <div class="answer-mode-tabs">
+        <button class="answer-tab active" id="tabTypeBtn">✍️ Type answers</button>
+        <button class="answer-tab" id="tabUploadBtn">📎 Upload sheet</button>
+      </div>
+      <div id="typeAnswerMode"><div id="questionsList"></div></div>
+      <div id="uploadAnswerMode" style="display:none;">
+        <div class="upload-answer-card">
+          <div class="upload-answer-icon">📎</div>
+          <h3>Upload your answer sheet</h3>
+          <p>Write answers on paper, scan/photo them, upload as PDF/DOCX. AI will read and grade.</p>
+          <input type="file" id="answerSheetInput" accept=".pdf,.docx,.txt,.md" hidden>
+          <button class="btn-primary-inline" id="answerSheetPickBtn">Choose file</button>
+          <p class="upload-file-name" id="answerSheetFileName">No file selected</p>
+        </div>
+      </div>
+      <div class="submit-bar">
+        <button class="btn-primary-large" id="submitExerciseBtn" disabled>Submit for grading →</button>
+      </div>
+      <div class="error-box" id="takeExerciseError"></div>
+    </div>
+  </div>
+
+  <!-- RESULT -->
+  <div class="view result-view" id="resultView">
+    <div class="result-container">
+      <button class="back-btn" id="resultBackBtn">← Back</button>
+      <div class="result-hero" id="resultHero"></div>
+      <div id="resultContent"></div>
+    </div>
+  </div>
+
+  <!-- LIVE CLASSROOM -->
+  <div class="view classroom-view" id="classroomView">
+    <div class="classroom-toolbar">
+      <button class="back-btn" id="classEndBtn">← End class</button>
+      <div class="classroom-info">
+        <span id="classroomSubject">Class</span>
+        <span id="classroomTopic"></span>
+        <span id="classroomProgress"></span>
+      </div>
+      <div class="classroom-controls" id="classroomControls" style="display:none;">
+        <button class="class-ctrl" id="classPlayBtn">⏸ Pause</button>
+        <button class="class-ctrl" id="classClearBtn" title="Clear the board">🧽</button>
+        <button class="class-ctrl" id="classSkipBtn">⏭ Skip</button>
+        
+        <button class="class-ctrl" id="classHandBtn" style="background:rgba(239,68,68,0.2); color:#fca5a5; border-color:#ef4444;">✋ Raise Hand</button>
+      </div>
+    </div>
+
+    <div class="classroom-loading" id="classroomLoading">
+      <div class="chalk-doodle">
+        <div class="doodle-line"></div>
+        <div class="doodle-line"></div>
+        <div class="doodle-line short"></div>
+      </div>
+      <p>The teacher is preparing today's lesson…</p>
+    </div>
+
+    <div class="classroom-board" id="classroomBoard" style="display:none;">
+      <div class="board-frame">
+        <div class="board-inner">
+          <div class="board-header-row">
+            <span class="chalk-kind" id="chalkKind"></span>
+            <span class="chalk-status" id="chalkStatus"></span>
+          </div>
+          <div class="chalk-content" id="chalkContent"></div>
+        </div>
+        <div class="board-tray">
+          <div class="chalk-stick"></div>
+          <div class="chalk-stick" style="width:40px;"></div>
+          <div class="chalk-duster"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="classroom-intro-card" id="classroomIntroCard" style="display:none;"></div>
+
+    <div class="classroom-complete-panel" id="classroomCompletePanel" style="display:none;">
+      <div class="complete-icon">🎓</div>
+      <h2>Class complete!</h2>
+      <p>You just studied <strong id="classDoneTopic"></strong>.</p>
+      <div class="complete-actions">
+        <button class="btn-primary-inline" id="classPracticeBtn">📝 Practice with exercises</button>
+        <button class="btn-outline" id="classAnotherBtn">▶ Start another class</button>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- INFO VIEW -->
+  <div class="view info-view" id="infoView">
+    <div class="info-container">
+      <div class="info-tabs">
+        <button class="info-tab active" data-target="doc">📖 Documentation</button>
+        <button class="info-tab" data-target="about">🌟 About</button>
+        <button class="info-tab" data-target="privacy">🔒 Privacy</button>
+        <button class="info-tab" data-target="contact">📞 Contact</button>
+      </div>
+
+      <div class="info-content">
+        <!-- Documentation -->
+        <div class="info-section active" id="sec-doc">
+          <h2>How to use Study Helper</h2>
+          <p>Welcome to your personal AI-powered learning assistant! Here is how to get the most out of the platform:</p>
+          <ul>
+            <li><strong>Upload Materials:</strong> Upload your PDFs, DOCX, or TXT files. The AI will read them and create study modules based on your syllabus.</li>
+            <li><strong>Chat with your Tutor:</strong> Click on any module to ask questions. The AI will explain concepts step-by-step, using your notes as context.</li>
+            <li><strong>Live Classroom:</strong> The AI will automatically schedule live classes based on your progress. When the countdown finishes, choose a language and watch the AI draw on the blackboard, use mathematical instruments, and speak the lesson aloud.</li>
+            <li><strong>Exercises & Quizzes:</strong> The AI will generate exercises (multiple choice, short answer, or essays) to test your knowledge. You can type your answers or upload a photo of your handwritten work to be graded.</li>
+            <li><strong>Timetable & Vision:</strong> The AI creates a personalised study timetable and projects your future exam scores based on your current effort.</li>
+          </ul>
+        </div>
+
+        <!-- About -->
+        <div class="info-section" id="sec-about">
+          <h2>About Study Helper</h2>
+          <p><strong>Study Helper</strong> is an intelligent, AI-powered educational platform designed to give every student a personal tutor.</p>
+          <p>Created by <strong>Miyoni</strong>, this platform combines advanced generative AI with interactive chalkboard drawing, voice narration, and personalized study planning to make learning engaging and accessible.</p>
+          <p>Whether you are struggling with a complex topic, need a study timetable, or want to test your knowledge, Study Helper adapts to your unique learning style.</p>
+        </div>
+
+        <!-- Privacy Policy -->
+        <div class="info-section" id="sec-privacy">
+          <h2>Privacy Policy</h2>
+          <p>Your privacy is important to us. Here is how we handle your data:</p>
+          <ul>
+            <li><strong>Your Data:</strong> All profile information, uploaded study materials, and generated exercises are stored securely to personalize your experience.</li>
+            <li><strong>AI Processing:</strong> Your messages and documents are processed by advanced AI models to generate explanations and lessons. We do not sell your data to third parties.</li>
+            <li><strong>Security:</strong> We implement industry-standard security measures to protect your personal information and academic data.</li>
+          </ul>
+        </div>
+
+        <!-- Contact -->
+        <div class="info-section" id="sec-contact">
+          <h2>Contact Information</h2>
+          <p>If you have any questions, feedback, or need support, feel free to reach out to the creator:</p>
+          <div class="contact-card">
+            <p><strong>Creator:</strong> Miyoni</p>
+            <p><strong>Email:</strong> <a href="mailto:prof200619@gmail.com">prof200619@gmail.com</a></p>
+            <p><strong>Phone:</strong> <a href="tel:0987074481">0987074481</a></p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+
+  <!-- Live Calculator -->
+  <div id="liveCalculator" class="live-calc" style="display:none;">
+    <div class="calc-header">
+      <span>🧮 Calculator</span>
+      <button id="closeCalcBtn" style="background:none; border:none; color:white; font-size:1.2rem; cursor:pointer;">✕</button>
+    </div>
+    <div class="calc-display" id="calcDisplay">0</div>
+    <div class="calc-grid">
+      <button data-val="C" class="calc-btn op">C</button>
+      <button data-val="(" class="calc-btn op">(</button>
+      <button data-val=")" class="calc-btn op">)</button>
+      <button data-val="/" class="calc-btn op">÷</button>
+      <button data-val="7" class="calc-btn">7</button>
+      <button data-val="8" class="calc-btn">8</button>
+      <button data-val="9" class="calc-btn">9</button>
+      <button data-val="*" class="calc-btn op">×</button>
+      <button data-val="4" class="calc-btn">4</button>
+      <button data-val="5" class="calc-btn">5</button>
+      <button data-val="6" class="calc-btn">6</button>
+      <button data-val="-" class="calc-btn op">-</button>
+      <button data-val="1" class="calc-btn">1</button>
+      <button data-val="2" class="calc-btn">2</button>
+      <button data-val="3" class="calc-btn">3</button>
+      <button data-val="+" class="calc-btn op">+</button>
+      <button data-val="0" class="calc-btn" style="grid-column:span 2;">0</button>
+      <button data-val="." class="calc-btn">.</button>
+      <button data-val="=" class="calc-btn eq">=</button>
+    </div>
+  </div>
+  
+  <!-- Language Selection Modal -->
+  <div id="langModal" class="lang-modal" style="display:none;">
+    <div class="lang-modal-content">
+      <h2>Choose Class Language</h2>
+      <p>Which language should the AI use to teach this lesson?</p>
+      <div class="lang-options">
+        <button class="lang-btn" data-lang="en">
+          <span class="flag">🇬🇧</span> English
+        </button>
+        <button class="lang-btn" data-lang="ny">
+          <span class="flag">🇲🇼</span> Chichewa
+        </button>
+      </div>
+    </div>
+  </div>
+  <div class="toast" id="toast"></div>
+<div class="toast-announcement" id="toastAnnouncement"></div>
+<script src="/app.js"></script>
+<script src="/classroom.js"></script>
+</body>
+</html>
