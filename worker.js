@@ -172,37 +172,28 @@ export default {
           const body = await request.json();
           const { profileId, language } = body;
           
-          const profiles = await readGitHub(env, 'data/profiles.json', []);
-          const profile = profiles.find(p => p.id === profileId) || { name: 'Student' };
-          
-          let prompt = `Start a live class for ${profile.name}. Return ONLY valid JSON: {"subject":"Science","topic":"Introduction","layout":"single","segments":[{"kind":"title","section":1,"elements":[{"type":"title","text":"Welcome"},{"type":"text","text":"Let's begin."}],"speech":"Welcome to class."}]}`;
-          if (language === 'ny') prompt += `\nCRITICAL: Teach entirely in Chichewa.`;
-
           let parsed = {};
           try {
-            // Wrap Gemini call in a timeout to prevent Cloudflare from hanging
+            const profiles = await readGitHub(env, 'data/profiles.json', []);
+            const profile = profiles.find(p => p.id === profileId) || { name: 'Student' };
+            
+            let prompt = `Start a live class for ${profile.name}. Return ONLY valid JSON: {"subject":"Science","topic":"Introduction","layout":"single","segments":[{"kind":"title","section":1,"elements":[{"type":"title","text":"Welcome"},{"type":"text","text":"Let's begin."}],"speech":"Welcome to class."}]}`;
+            if (language === 'ny') prompt += `\nCRITICAL: Teach entirely in Chichewa.`;
+
             const aiPromise = callGemini(env, prompt, null, true);
             const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('AI Timeout')), 8000));
             parsed = await Promise.race([aiPromise, timeoutPromise]);
-          } catch (e) {
-            console.error('Gemini failed or timed out', e);
-          }
+          } catch (e) { console.error('AI failed', e); }
 
-          // Fallback if AI fails or returns bad format
           if (!parsed || !parsed.segments || !parsed.segments.length) {
             parsed = {
               subject: "General",
               topic: "Welcome to Class",
               layout: "single",
-              segments: [{
-                kind: "title",
-                section: 1,
-                elements: [{ type: "title", text: "Welcome to Class" }, { type: "text", text: "Let's start learning." }],
-                speech: "Welcome to today's class. Let's begin."
-              }]
+              segments: [{ kind: "title", section: 1, elements: [{ type: "title", text: "Welcome to Class" }, { type: "text", text: "Let's start learning." }], speech: "Welcome to today's class. Let's begin." }]
             };
           }
-          
+
           const session = {
             id: Math.random().toString(36).slice(2, 10),
             profileId,
@@ -212,14 +203,16 @@ export default {
             segments: parsed.segments || [],
             isComplete: false
           };
-          
-          // Try to save, but don't block the response if it fails
-          try {
-            const rooms = await readGitHub(env, 'data/classrooms.json', []);
-            const updated = rooms.filter(r => r.profileId !== profileId);
-            updated.push(session);
-            await writeGitHub(env, 'data/classrooms.json', updated);
-          } catch (e) { console.error('Save failed', e); }
+
+          // Use ctx.waitUntil to save in the background so the response is instant
+          ctx.waitUntil((async () => {
+            try {
+              const rooms = await readGitHub(env, 'data/classrooms.json', []);
+              const updated = rooms.filter(r => r.profileId !== profileId);
+              updated.push(session);
+              await writeGitHub(env, 'data/classrooms.json', updated);
+            } catch (e) { console.error('Background save failed', e); }
+          })());
 
           return json({ session });
         } else if (path === '/api/classroom/next' && method === 'POST') {
@@ -230,28 +223,23 @@ export default {
           try {
             const rooms = await readGitHub(env, 'data/classrooms.json', []);
             session = rooms.find(r => r.profileId === profileId);
-          } catch (e) {}
+          } catch (e) { console.error('Load failed', e); }
 
           if (!session || session.isComplete) return json({ segment: null, isFinal: true });
 
-          let prompt = `Continue live class on "${session.topic}". Return ONLY valid JSON: {"segment":{"kind":"point","section":1,"elements":[{"type":"text","text":"Here is more info."}],"speech":"Let's look at this."},"isFinal":false}`;
-          if (language === 'ny') prompt += `\nCRITICAL: Teach entirely in Chichewa.`;
-
           let parsed = {};
           try {
+            let prompt = `Continue live class on "${session.topic}". Return ONLY valid JSON: {"segment":{"kind":"point","section":1,"elements":[{"type":"text","text":"Here is more info."}],"speech":"Let's look at this."},"isFinal":false}`;
+            if (language === 'ny') prompt += `\nCRITICAL: Teach entirely in Chichewa.`;
+
             const aiPromise = callGemini(env, prompt, null, true);
             const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('AI Timeout')), 8000));
             parsed = await Promise.race([aiPromise, timeoutPromise]);
-          } catch (e) { console.error('Gemini timeout', e); }
+          } catch (e) { console.error('AI failed', e); }
 
           if (!parsed || !parsed.segment) {
             parsed = {
-              segment: {
-                kind: "point",
-                section: 1,
-                elements: [{ type: "text", text: "End of lesson." }],
-                speech: "That brings us to the end of today's topic."
-              },
+              segment: { kind: "point", section: 1, elements: [{ type: "text", text: "End of lesson." }], speech: "That's all for today." },
               isFinal: true
             };
           }
@@ -261,12 +249,15 @@ export default {
             if (parsed.isFinal) session.isComplete = true;
           }
 
-          try {
-            const rooms = await readGitHub(env, 'data/classrooms.json', []);
-            const updated = rooms.filter(r => r.profileId !== profileId);
-            updated.push(session);
-            await writeGitHub(env, 'data/classrooms.json', updated);
-          } catch (e) {}
+          // Save in background
+          ctx.waitUntil((async () => {
+            try {
+              const rooms = await readGitHub(env, 'data/classrooms.json', []);
+              const updated = rooms.filter(r => r.profileId !== profileId);
+              updated.push(session);
+              await writeGitHub(env, 'data/classrooms.json', updated);
+            } catch (e) { console.error('Background save failed', e); }
+          })());
 
           return json({ segment: parsed.segment, isFinal: parsed.isFinal, session });
         } else if (path === '/api/classroom/dismiss-suggestion' && method === 'POST') {
